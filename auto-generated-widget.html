@@ -57,10 +57,13 @@ requirejs.config({
         // Example of how to define the key (you make up the key) and the URL
         // Make sure you DO NOT put the .js at the end of the URL
         // SmoothieCharts: '//smoothiecharts.org/smoothie',
+        Three: '//i2dcui.appspot.com/slingshot?url=http://threejs.org/build/three.min.js',
+        ThreeSTLLoader: '//i2dcui.appspot.com/slingshot?url=http://threejs.org/examples/js/loaders/STLLoader.js',
     },
     shim: {
         // See require.js docs for how to define dependencies that
         // should be loaded before your script/widget.
+        ThreeSTLLoader: ['Three'],
     }
 });
 
@@ -104,7 +107,7 @@ cprequire_test(["inline:org-jscut-widget-prismatic"], function(myWidget) {
 } /*end_test*/ );
 
 // This is the main definition of your widget. Give it a unique name.
-cpdefine("inline:org-jscut-widget-prismatic", ["chilipeppr_ready", /* other dependencies here */], function () {
+cpdefine("inline:org-jscut-widget-prismatic", ["chilipeppr_ready", "Three", "ThreeSTLLoader"], function () {
     return {
         /**
          * The ID of the widget. You must define this and make it unique.
@@ -166,9 +169,24 @@ cpdefine("inline:org-jscut-widget-prismatic", ["chilipeppr_ready", /* other depe
             this.setupUiFromLocalStorage();
             this.btnSetup();
             this.forkSetup();
+            chilipeppr.subscribe("/com-chilipeppr-elem-dragdrop/ondroppedStl", this, this.onDroppedStl, 9);
 
             console.log("I am done being initted.");
         },
+
+        onDroppedStl: function (data, info) {
+            if (info.name.endsWith('.stl')) {
+                var loader = new THREE.STLLoader();
+                var geometry = loader.parse(data);
+                console.log(geometry);
+                var material = new THREE.MeshPhongMaterial({ color: 0xff5533, specular: 0x111111, shininess: 200 });
+                var mesh = new THREE.Mesh(geometry, material);
+                chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneadd', mesh);
+                return false;
+            } else
+                return true;
+        },
+
         /**
          * Call this method from init to setup all the buttons when this widget
          * is first loaded. This basically attaches click events to your 
