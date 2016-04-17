@@ -145,13 +145,34 @@ cpdefine("inline:org-jscut-widget-prismatic", ["chilipeppr_ready", "Three", "Thr
         },
 
         onDroppedStl: function (data, info) {
+            'use strict';
             if (info.name.endsWith('.stl')) {
-                var loader = new THREE.STLLoader();
-                var geometry = loader.parse(data);
+                let loader = new THREE.STLLoader();
+                let geometry = loader.parse(data);
                 console.log(geometry);
-                var material = new THREE.MeshPhongMaterial({ color: 0xff5533, specular: 0x111111, shininess: 200 });
-                var mesh = new THREE.Mesh(geometry, material);
+                let material = new THREE.MeshPhongMaterial({ color: 0x007777, specular: 0x111111, shininess: 200 });
+                let mesh = new THREE.Mesh(geometry, material);
                 chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneadd', mesh);
+
+                let pos = geometry.getAttribute('position');
+
+                let planeTriangles = [];
+                for (let i = 0; i < pos.length; i += 9)
+                    if (pos.array[i + 2] === pos.array[i + 5] && pos.array[i + 2] === pos.array[i + 8])
+                        planeTriangles.push(pos.array.subarray(i, i + 9));
+                planeTriangles.sort((a, b) => a[2] - b[2]);
+
+                let planeGeometry = new THREE.BufferGeometry();
+                let planeVertices = new Float32Array(planeTriangles.length * 9);
+                for (let i = 0; i < planeTriangles.length; ++i)
+                    for (let j = 0; j < 9; ++j)
+                        planeVertices[i * 9 + j] = planeTriangles[i][j];
+                planeGeometry.addAttribute('position', new THREE.BufferAttribute(planeVertices, 3));
+
+                let planeMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                let planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
+                chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneadd', planeMesh);
+
                 return false;
             } else
                 return true;
