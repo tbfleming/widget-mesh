@@ -38,7 +38,7 @@ requirejs.config({
     }
 });
 
-cprequire_test(["inline:org-jscut-widget-prismatic"], function(myWidget) {
+cprequire_test(["inline:org-jscut-widget-mesh"], function(myWidget) {
 
     // Test this element. This code is auto-removed by the chilipeppr.load()
     // when using this widget in production. So use the cpquire_test to do things
@@ -78,12 +78,12 @@ cprequire_test(["inline:org-jscut-widget-prismatic"], function(myWidget) {
 } /*end_test*/ );
 
 // This is the main definition of your widget. Give it a unique name.
-cpdefine("inline:org-jscut-widget-prismatic", ["chilipeppr_ready", "Three", "ThreeSTLLoader", "Clipper"], function () {
+cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTLLoader", "Clipper"], function () {
     return {
         /**
          * The ID of the widget. You must define this and make it unique.
          */
-        id: "org-jscut-widget-prismatic", // Make the id the same as the cpdefine id
+        id: "org-jscut-widget-mesh", // Make the id the same as the cpdefine id
         name: "Widget / Template", // The descriptive name of your widget.
         desc: "This example widget gives you a framework for creating your own widget. Please change this description once you fork this template and create your own widget. Make sure to run runme.js every time you are done editing your code so you can regenerate your README.md file, regenerate your auto-generated-widget.html, and automatically push your changes to Github.", // A description of what your widget does
         url: "(auto fill by runme.js)",       // The final URL of the working widget as a single HTML file with CSS and Javascript inlined. You can let runme.js auto fill this if you are using Cloud9.
