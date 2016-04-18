@@ -79,6 +79,7 @@ cprequire_test(["inline:org-jscut-widget-mesh"], function(myWidget) {
 
 // This is the main definition of your widget. Give it a unique name.
 cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTLLoader", "Clipper"], function () {
+    'use strict';
     return {
         /**
          * The ID of the widget. You must define this and make it unique.
@@ -140,92 +141,56 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             this.setupUiFromLocalStorage();
             this.btnSetup();
             this.forkSetup();
-            chilipeppr.subscribe("/com-chilipeppr-elem-dragdrop/ondroppedStl", this, this.onDroppedStl, 9);
+            chilipeppr.subscribe("/com-chilipeppr-elem-dragdrop/ondroppedStl", this, this.onDroppedStl);
 
             console.log("I am done being initted.");
         },
 
+        // Mesh object definition: {
+        //      threeMesh:                      THREE.Mesh
+        //      org-domain-widget-name/*:       Data that belongs to widget
+        //      org-domain-workspace-name/*:    Data that belongs to workspace
+        // }
+        meshes: [],
+
+        // Find a Mesh object or a THREE.Mesh. Returns index into meshes[], or undefined
+        getMeshIndex: function(mesh) {
+            for (let i = 0; i < this.meshes.length; ++i)
+                if (this.meshes[i] === mesh || this.meshes[i].threeMesh === mesh)
+                    return i;
+        },
+
+        // Add a THREE.Mesh. Returns the new Mesh object.
+        addThreeMesh: function (threeMesh, attrs) {
+            let mesh = {
+                threeMesh: threeMesh,
+            };
+            for (let key in attrs)
+                mesh[key] = attrs[key];
+            this.meshes.push(mesh);
+            chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneadd', threeMesh);
+            chilipeppr.publish('/org-jscut-widget-mesh/added', mesh);
+            return mesh;
+        },
+
+        // Remove a mesh. You may pass in either a Mesh object or a THREE.Mesh.
+        removeMesh: function(mesh) {
+            let i = getMeshIndex(mesh);
+            if(i === undefined)
+                return;
+            mesh = meshes[i];
+            chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneremove', mesh.threeMesh);
+            chilipeppr.publish('/org-jscut-widget-mesh/removed', mesh);
+        },
+
         onDroppedStl: function (data, info) {
-            'use strict';
-            if (info.name.endsWith('.stl')) {
-                let loader = new THREE.STLLoader();
-                let geometry = loader.parse(data);
-                console.log(geometry);
-                let material = new THREE.MeshPhongMaterial({ color: 0x007777, specular: 0x111111, shininess: 200 });
-                let mesh = new THREE.Mesh(geometry, material);
-                chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneadd', mesh);
-
-                let pos = geometry.getAttribute('position');
-
-                let planeTriangles = [];
-                for (let i = 0; i < pos.length; i += 9)
-                    if (pos.array[i + 2] === pos.array[i + 5] && pos.array[i + 2] === pos.array[i + 8])
-                        planeTriangles.push(pos.array.subarray(i, i + 9));
-                planeTriangles.sort((a, b) => a[2] - b[2]);
-
-                let planeGeometry = new THREE.BufferGeometry();
-                let planeVertices = new Float32Array(planeTriangles.length * 9);
-                for (let i = 0; i < planeTriangles.length; ++i)
-                    for (let j = 0; j < 9; ++j)
-                        planeVertices[i * 9 + j] = planeTriangles[i][j];
-                planeGeometry.addAttribute('position', new THREE.BufferAttribute(planeVertices, 3));
-
-                let planeMaterial = new THREE.MeshBasicMaterial({ color: 0xC0C0C0 });
-                let planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
-                chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneadd', planeMesh);
-
-                let scale = 1000000;
-                let planes = [];
-                for (let i = 0; i < planeTriangles.length; ++i) {
-                    if (planes.length === 0 || planeTriangles[i][2] != planes[planes.length - 1].z)
-                        planes.push({ z: planeTriangles[i][2], paths: [] });
-                    planes[planes.length - 1].paths.push([
-                        { X: planeTriangles[i][0] * scale, Y: planeTriangles[i][1] * scale },
-                        { X: planeTriangles[i][3] * scale, Y: planeTriangles[i][4] * scale },
-                        { X: planeTriangles[i][6] * scale, Y: planeTriangles[i][7] * scale }]);
-                }
-
-                let co = new ClipperLib.ClipperOffset(2.0, scale / 1000);
-                for (let i = 0; i < planes.length; ++i) {
-                    let paths = planes[i].paths;
-                    planes[i].paths = [];
-                    let first = true;
-                    while (paths.length && paths[0].length) {
-                        co.AddPaths(paths, ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
-                        if (first)
-                            co.Execute(paths, 1);
-                        else
-                            co.Execute(paths, -2 * scale);
-                        first = false;
-                        co.Clear();
-                        planes[i].paths = planes[i].paths.concat(paths);
-
-                    }
-                }
-
-                function cleanup(coord) {
-                    return (coord / scale).toFixed(4);
-                }
-
-                let gcode = '';
-                for (let i = 1; i < planes.length; ++i) {
-                    let paths = planes[i].paths;
-                    for (let j = 0; j < paths.length; ++j) {
-                        let path = paths[j];
-                        path.push(path[0]);
-                        gcode += 'G0 Z100\n';
-                        gcode += 'G0 X' + cleanup(path[0].X) + ' Y' + cleanup(path[0].Y);
-                        gcode += 'G0 Z' + planes[i].z.toFixed(4) + '\n';
-                        for (let k = 1; k < path.length; ++k) {
-                            gcode += 'G1 X' + cleanup(path[k].X) + ' Y' + cleanup(path[k].Y) + '\n';
-                        }
-                    }
-                }
-                chilipeppr.publish('/com-chilipeppr-elem-dragdrop/ondropped', gcode);
-
-                return false;
-            } else
-                return true;
+            let loader = new THREE.STLLoader();
+            let geometry = loader.parse(data);
+            console.log(geometry);
+            let material = new THREE.MeshPhongMaterial({ color: 0x007777, specular: 0x111111, shininess: 200 });
+            let threeMesh = new THREE.Mesh(geometry, material);
+            this.addThreeMesh(threeMesh);
+            return false;
         },
 
         /**
