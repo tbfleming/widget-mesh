@@ -30,6 +30,7 @@ requirejs.config({
         Three: '//i2dcui.appspot.com/slingshot?url=http://threejs.org/build/three.min.js',
         ThreeSTLLoader: '//i2dcui.appspot.com/slingshot?url=http://threejs.org/examples/js/loaders/STLLoader.js',
         Clipper: '//i2dcui.appspot.com/js/clipper/clipper_unminified',
+        WrapVirtualDom: '//i2dcui.appspot.com/slingshot?url=https://raw.githubusercontent.com/tbfleming/wrap-virtual-dom/master/wrap-virtual-dom.js',
     },
     shim: {
         // See require.js docs for how to define dependencies that
@@ -78,7 +79,7 @@ cprequire_test(["inline:org-jscut-widget-mesh"], function(myWidget) {
 } /*end_test*/ );
 
 // This is the main definition of your widget. Give it a unique name.
-cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTLLoader", "Clipper"], function () {
+cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTLLoader", "Clipper", "WrapVirtualDom"], function () {
     'use strict';
     return {
         /**
@@ -135,18 +136,15 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
          * All widgets should have an init method. It should be run by the
          * instantiating code like a workspace or a different widget.
          */
-        init: function() {
-            console.log("I am being initted. Thanks.");
-
+        init: function () {
             this.setupUiFromLocalStorage();
-            this.btnSetup();
             this.forkSetup();
             chilipeppr.subscribe("/com-chilipeppr-elem-dragdrop/ondroppedStl", this, this.onDroppedStl);
-
-            console.log("I am done being initted.");
+            this.initRenderBody();
         },
 
         // Mesh object definition: {
+        //      filename:                       Mesh filename
         //      threeMesh:                      THREE.Mesh
         //      org-domain-widget-name/*:       Data that belongs to widget
         //      org-domain-workspace-name/*:    Data that belongs to workspace
@@ -154,7 +152,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
         meshes: [],
 
         // Find a Mesh object or a THREE.Mesh. Returns index into meshes[], or undefined
-        getMeshIndex: function(mesh) {
+        getMeshIndex: function (mesh) {
             for (let i = 0; i < this.meshes.length; ++i)
                 if (this.meshes[i] === mesh || this.meshes[i].threeMesh === mesh)
                     return i;
@@ -163,6 +161,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
         // Add a THREE.Mesh. Returns the new Mesh object.
         addThreeMesh: function (threeMesh, attrs) {
             let mesh = {
+                filename: 'unknown',
                 threeMesh: threeMesh,
             };
             for (let key in attrs)
@@ -170,17 +169,60 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             this.meshes.push(mesh);
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneadd', threeMesh);
             chilipeppr.publish('/org-jscut-widget-mesh/added', mesh);
+            this.changed = true;
             return mesh;
         },
 
         // Remove a mesh. You may pass in either a Mesh object or a THREE.Mesh.
-        removeMesh: function(mesh) {
-            let i = getMeshIndex(mesh);
-            if(i === undefined)
+        removeMesh: function (mesh) {
+            let i = this.getMeshIndex(mesh);
+            if (i === undefined)
                 return;
-            mesh = meshes[i];
+            mesh = this.meshes[i];
+            this.meshes.splice(i, 1);
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneremove', mesh.threeMesh);
             chilipeppr.publish('/org-jscut-widget-mesh/removed', mesh);
+            this.changed = true;
+        },
+
+        // Render widget body
+        renderBody: function () {
+            let h = WrapVirtualDom.h;
+            if (this.meshes.length === 0)
+                return h('div', {}, 'Drag in an STL file to get started.');
+            return h('table', { style: { width: '100%' } }, [
+                h('tr', {}, h('th', {}, 'File')),
+                this.meshes.map(mesh =>
+                    h('tr', {}, [
+                        h('td', {}, mesh.filename),
+                        h('td', { style: { float: 'right' } },
+                            h('button',
+                                { 'onclick': e => { this.removeMesh(mesh) } },
+                                h('span.glyphicon.glyphicon-remove')))]))]);
+        },
+
+        // Set this to true to eventually trigger a rerender
+        changed: false,
+
+        // Set up renderBody's render loop
+        initRenderBody: function () {
+            let body = document.getElementById('org-jscut-widget-mesh-body');
+            body.removeChild(body.firstChild);
+            let tree = this.renderBody();
+            let rootNode = WrapVirtualDom.createElement(tree);
+            body.appendChild(rootNode);
+
+            let rerender = () => {
+                if (this.changed) {
+                    let newTree = this.renderBody();
+                    let patches = WrapVirtualDom.diff(tree, newTree);
+                    rootNode = WrapVirtualDom.patch(rootNode, patches);
+                    tree = newTree;
+                    this.changed = false;
+                }
+                requestAnimationFrame(rerender);
+            };
+            requestAnimationFrame(rerender);
         },
 
         onDroppedStl: function (data, info) {
@@ -189,78 +231,10 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             console.log(geometry);
             let material = new THREE.MeshPhongMaterial({ color: 0x007777, specular: 0x111111, shininess: 200 });
             let threeMesh = new THREE.Mesh(geometry, material);
-            this.addThreeMesh(threeMesh);
+            this.addThreeMesh(threeMesh, { filename: info.name });
             return false;
         },
 
-        /**
-         * Call this method from init to setup all the buttons when this widget
-         * is first loaded. This basically attaches click events to your 
-         * buttons. It also turns on all the bootstrap popovers by scanning
-         * the entire DOM of the widget.
-         */
-        btnSetup: function() {
-
-            // Chevron hide/show body
-            var that = this;
-            $('#' + this.id + ' .hidebody').click(function(evt) {
-                console.log("hide/unhide body");
-                if ($('#' + that.id + ' .panel-body').hasClass('hidden')) {
-                    // it's hidden, unhide
-                    that.showBody(evt);
-                }
-                else {
-                    // hide
-                    that.hideBody(evt);
-                }
-            });
-
-            // Ask bootstrap to scan all the buttons in the widget to turn
-            // on popover menus
-            $('#' + this.id + ' .btn').popover({
-                delay: 1000,
-                animation: true,
-                placement: "auto",
-                trigger: "hover",
-                container: 'body'
-            });
-
-            // Init Say Hello Button on Main Toolbar
-            // We are inlining an anonymous method as the callback here
-            // as opposed to a full callback method in the Hello Word 2
-            // example further below. Notice we have to use "that" so 
-            // that the this is set correctly inside the anonymous method
-            $('#' + this.id + ' .btn-sayhello').click(function() {
-                console.log("saying hello");
-                // Make sure popover is immediately hidden
-                $('#' + that.id + ' .btn-sayhello').popover("hide");
-                // Show a flash msg
-                chilipeppr.publish(
-                    "/com-chilipeppr-elem-flashmsg/flashmsg",
-                    "Hello Title",
-                    "Hello World from widget " + that.id,
-                    1000
-                );
-            });
-
-            // Init Hello World 2 button on Tab 1. Notice the use
-            // of the slick .bind(this) technique to correctly set "this"
-            // when the callback is called
-            $('#' + this.id + ' .btn-helloworld2').click(this.onHelloBtnClick.bind(this));
-
-        },
-        /**
-         * onHelloBtnClick is an example of a button click event callback
-         */
-        onHelloBtnClick: function(evt) {
-            console.log("saying hello 2 from btn in tab 1");
-            chilipeppr.publish(
-                '/com-chilipeppr-elem-flashmsg/flashmsg',
-                "Hello 2 Title",
-                "Hello World 2 from Tab 1 from widget " + this.id,
-                2000 /* show for 2 second */
-            );
-        },
         /**
          * User options are available in this property for reference by your
          * methods. If any change is made on these options, please call
