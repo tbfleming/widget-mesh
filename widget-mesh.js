@@ -141,6 +141,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             this.forkSetup();
             chilipeppr.subscribe("/com-chilipeppr-elem-dragdrop/ondroppedStl", this, this.onDroppedStl);
             this.initRenderBody();
+            this.request3dObject();
+            this.initMouse();
         },
 
         // Mesh object definition: {
@@ -167,6 +169,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             for (let key in attrs)
                 mesh[key] = attrs[key];
             this.meshes.push(mesh);
+            threeMesh.material.opacity = .5;
+            threeMesh.material.transparent = true;
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneadd', threeMesh);
             chilipeppr.publish('/org-jscut-widget-mesh/added', mesh, this.meshes);
             this.changed = true;
@@ -183,6 +187,16 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneremove', mesh.threeMesh);
             chilipeppr.publish('/org-jscut-widget-mesh/removed', mesh, this.meshes);
             this.changed = true;
+        },
+
+        highlightedMesh: null,
+
+        highlightMesh: function (mesh) {
+            if (this.highlightedMesh)
+                this.highlightedMesh.threeMesh.material.transparent = true;
+            this.highlightedMesh = mesh;
+            if (this.highlightedMesh)
+                this.highlightedMesh.threeMesh.material.transparent = false;
         },
 
         // Render widget body
@@ -223,6 +237,53 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
                 requestAnimationFrame(rerender);
             };
             requestAnimationFrame(rerender);
+        },
+
+        request3dObject: function () {
+            chilipeppr.subscribe("/com-chilipeppr-widget-3dviewer/recv3dObject", this, this.recv3dObject);
+            let f = () => {
+                if (!this.widget3d) {
+                    chilipeppr.publish('/com-chilipeppr-widget-3dviewer/request3dObject');
+                    requestAnimationFrame(f);
+                }
+            };
+            requestAnimationFrame(f);
+        },
+
+        recv3dObject: function (object, attrs) {
+            this.camera = attrs.camera;
+            this.widget3d = attrs.widget;
+            chilipeppr.unsubscribe("/com-chilipeppr-widget-3dviewer/recv3dObject", this, this.recv3dObject);
+        },
+
+        initMouse: function() {
+            this.renderArea = document.getElementById('com-chilipeppr-widget-3dviewer-renderArea');
+            if (this.renderArea)
+                this.renderArea.addEventListener('mousemove', (e) => this.mousemove(e), true);
+        },
+
+        getMeshIndexUnderMouse: function (e) {
+            if (!this.camera)
+                return -1;
+            var raycaster = new THREE.Raycaster();
+            var mouse = new THREE.Vector2(
+                (event.clientX / window.innerWidth) * 2 - 1,
+                -(event.clientY / window.innerHeight) * 2 + 1);
+            raycaster.setFromCamera(mouse, this.camera);
+            let io = raycaster.intersectObjects(this.meshes.map(mesh => mesh.threeMesh));
+            if (io.length)
+                return this.getMeshIndex(io[0].object);
+            return -1;
+        },
+
+        mousemove: function (e) {
+            if (this.widget3d && (this.widget3d.isInspectSelect || this.widget3d.isJogSelect))
+                return;
+            let index = this.getMeshIndexUnderMouse(e);
+            if (index >= 0)
+                this.highlightMesh(this.meshes[index]);
+            else
+                this.highlightMesh(null);
         },
 
         onDroppedStl: function (data, info) {
