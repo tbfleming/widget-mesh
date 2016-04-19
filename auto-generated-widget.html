@@ -213,6 +213,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             if (i === undefined)
                 return;
             mesh = this.meshes[i];
+            if (mesh === this.highlightedMesh)
+                this.highlightedMesh = null;
             this.meshes.splice(i, 1);
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneremove', mesh.threeMesh);
             chilipeppr.publish('/org-jscut-widget-mesh/removed', mesh, this.meshes);
@@ -222,11 +224,14 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
         highlightedMesh: null,
 
         highlightMesh: function (mesh) {
+            if (mesh === this.highlightedMesh)
+                return;
             if (this.highlightedMesh)
                 this.highlightedMesh.threeMesh.material.transparent = true;
             this.highlightedMesh = mesh;
             if (this.highlightedMesh)
                 this.highlightedMesh.threeMesh.material.transparent = false;
+            chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
         },
 
         // Render widget body
@@ -286,40 +291,90 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             chilipeppr.unsubscribe("/com-chilipeppr-widget-3dviewer/recv3dObject", this, this.recv3dObject);
         },
 
-        initMouse: function() {
+        xyPlane: null,
+        renderArea: null,
+        mouseIsDown: false,
+        mouseDownPoint: null,
+
+        initMouse: function () {
+            this.xyPlane = new THREE.Mesh(
+                new THREE.PlaneBufferGeometry(2000, 2000, 8, 8),
+                new THREE.MeshBasicMaterial({ visible: false }));
             this.renderArea = document.getElementById('com-chilipeppr-widget-3dviewer-renderArea');
-            if (this.renderArea)
+            if (this.renderArea) {
+                this.renderArea.addEventListener('mousedown', (e) => this.mousedown(e), true);
                 this.renderArea.addEventListener('mousemove', (e) => this.mousemove(e), true);
+                this.renderArea.addEventListener('mouseup', (e) => this.mouseup(e), true);
+            }
         },
 
-        getMeshIndexUnderMouse: function (e) {
-            if (!this.camera)
-                return -1;
+        getRaycaster: function (e) {
             var raycaster = new THREE.Raycaster();
             var mouse = new THREE.Vector2(
                 (event.clientX / window.innerWidth) * 2 - 1,
                 -(event.clientY / window.innerHeight) * 2 + 1);
             raycaster.setFromCamera(mouse, this.camera);
-            let io = raycaster.intersectObjects(this.meshes.map(mesh => mesh.threeMesh));
+            return raycaster;
+        },
+
+        getXYUnderMouse: function (e) {
+            let io = this.getRaycaster(e).intersectObject(this.xyPlane);
+            if (io.length)
+                return io[0].point;
+        },
+
+        getMeshIndexUnderMouse: function (e) {
+            if (!this.camera)
+                return -1;
+            let io = this.getRaycaster(e).intersectObjects(this.meshes.map(mesh => mesh.threeMesh));
             if (io.length)
                 return this.getMeshIndex(io[0].object);
             return -1;
         },
 
-        mousemove: function (e) {
+        hightlightMeshUnderMouse: function (e) {
             if (this.widget3d && (this.widget3d.isInspectSelect || this.widget3d.isJogSelect))
-                return;
+                return false;
             let index = this.getMeshIndexUnderMouse(e);
-            if (index >= 0)
-                this.highlightMesh(this.meshes[index]);
-            else
+            if (index < 0) {
                 this.highlightMesh(null);
+                return false;
+            }
+            this.highlightMesh(this.meshes[index]);
+            return true;
+        },
+
+        mousedown: function (e) {
+            this.mouseDownPoint = this.getXYUnderMouse(e);
+            if (this.hightlightMeshUnderMouse(e) && this.mouseDownPoint) {
+                this.mouseIsDown = true;
+                e.stopPropagation();
+            }
+        },
+
+        mousemove: function (e) {
+            if (this.mouseIsDown) {
+                let p = this.getXYUnderMouse(e);
+                if (p) {
+                    this.highlightedMesh.threeMesh.position.add(p).sub(this.mouseDownPoint);
+                    this.mouseDownPoint = p;
+                    chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
+                }
+                e.stopPropagation();
+            } else
+                this.hightlightMeshUnderMouse(e);
+        },
+
+        mouseup: function (e) {
+            if (!this.mouseIsDown)
+                return;
+            this.mouseIsDown = false;
+            e.stopPropagation();
         },
 
         onDroppedStl: function (data, info) {
             let loader = new THREE.STLLoader();
             let geometry = loader.parse(data);
-            console.log(geometry);
             let material = new THREE.MeshPhongMaterial({ color: 0x007777, specular: 0x111111, shininess: 200 });
             let threeMesh = new THREE.Mesh(geometry, material);
             this.addThreeMesh(threeMesh, { filename: info.name });
