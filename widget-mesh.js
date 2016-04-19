@@ -281,8 +281,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
         getRaycaster: function (e) {
             var raycaster = new THREE.Raycaster();
             var mouse = new THREE.Vector2(
-                (event.clientX / window.innerWidth) * 2 - 1,
-                -(event.clientY / window.innerHeight) * 2 + 1);
+                (e.clientX / window.innerWidth) * 2 - 1,
+                -(e.clientY / window.innerHeight) * 2 + 1);
             raycaster.setFromCamera(mouse, this.camera);
             return raycaster;
         },
