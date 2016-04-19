@@ -198,7 +198,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
                 mesh[key] = attrs[key];
             this.meshes.push(mesh);
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneadd', threeMesh);
-            chilipeppr.publish('/org-jscut-widget-mesh/added', mesh);
+            chilipeppr.publish('/org-jscut-widget-mesh/added', mesh, this.meshes);
             this.changed = true;
             return mesh;
         },
@@ -211,7 +211,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             mesh = this.meshes[i];
             this.meshes.splice(i, 1);
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneremove', mesh.threeMesh);
-            chilipeppr.publish('/org-jscut-widget-mesh/removed', mesh);
+            chilipeppr.publish('/org-jscut-widget-mesh/removed', mesh, this.meshes);
             this.changed = true;
         },
 
