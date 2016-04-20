@@ -143,6 +143,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             this.request3dObject();
             this.initMouse();
             chilipeppr.subscribe("/com-chilipeppr-elem-dragdrop/ondroppedTyped", this, this.onDroppedTyped);
+            chilipeppr.subscribe("/org-jscut-widget-mesh/getWidget", callback => callback(this));
             chilipeppr.subscribe("/org-jscut-widget-mesh/addThreeMesh", this, this.addThreeMesh);
             chilipeppr.subscribe("/org-jscut-widget-mesh/removeMesh", this, this.removeMesh);
         },
@@ -213,6 +214,40 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
         },
 
+        // Render mesh selection. Other widgets call this to help fill in their UI.
+        renderMeshSelection: function (mesh, callback) {
+            let h = WrapVirtualDom.h;
+            if (mesh) {
+                return h('div', [
+                    mesh.name,
+                    h('button',
+                        {
+                            style: { 'float': 'right' },
+                            onclick: () => callback(null),
+                        },
+                        h('span.glyphicon.glyphicon-remove')),
+                ]);
+            } else {
+                return h('div', {
+                    onclick: e => {
+                        e.target.style.backgroundColor = 'green';
+                        e.target.childNodes[1].style.backgroundColor = 'green';
+                        chilipeppr.publish("/com-chilipeppr-elem-flashmsg/flashmsg", "Prismatic", "Click on a Mesh");
+                        if (this.selectCallback)
+                            this.selectCallback(null);
+                        this.selectCallback = mesh => {
+                            e.target.style.backgroundColor = 'transparent';
+                            e.target.childNodes[1].style.backgroundColor = 'transparent';
+                            callback(mesh);
+                        };
+                    }
+                }, [
+                    h('a', { href: '#', style: { 'pointer-events': 'none' } }, '<select>'),
+                    h('button', { style: { 'pointer-events': 'none', 'float': 'right' } }, h('span.glyphicon.glyphicon-edit'))
+                ]);
+            }
+        },
+
         // Render widget body
         renderBody: function () {
             let h = WrapVirtualDom.h;
@@ -235,7 +270,17 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
                             checked: mesh.threeMesh.visible,
                             onclick: e => { mesh.threeMesh.visible = e.target.checked; this.wakeanimate(); }
                         })),
-                        h('td', mesh.name),
+                        h('td',
+                            {
+                                style: { 'user-select': 'none' },
+                                onclick: () => {
+                                    if (this.selectCallback) {
+                                        this.selectCallback(mesh);
+                                        this.selectCallback = null;
+                                    }
+                                }
+                            },
+                            mesh.name),
                         h('td',
                             h('button',
                                 { 'onclick': e => { this.removeMesh(mesh) } },
@@ -287,6 +332,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
         renderArea: null,
         mouseIsDown: false,
         mouseDownPoint: null,
+        selectCallback: null,
 
         initMouse: function () {
             this.xyPlane = new THREE.Mesh(
@@ -340,7 +386,11 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
         mousedown: function (e) {
             this.mouseDownPoint = this.getXYUnderMouse(e);
             if (this.hightlightMeshUnderMouse(e) && this.mouseDownPoint) {
-                this.mouseIsDown = true;
+                if (this.selectCallback) {
+                    this.selectCallback(this.highlightedMesh);
+                    this.selectCallback = null;
+                } else
+                    this.mouseIsDown = true;
                 e.preventDefault();
                 e.stopPropagation();
             }
