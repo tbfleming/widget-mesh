@@ -202,6 +202,11 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             if (this.highlightedMesh)
                 this.highlightedMesh.threeMesh.material.transparent = false;
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
+            this.changed = true;
+        },
+
+        wakeanimate:function() {
+            chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
         },
 
         // Render widget body
@@ -210,11 +215,24 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             if (this.meshes.length === 0)
                 return h('div', {}, 'Drag in an STL file to get started.');
             return h('table', { style: { width: '100%' } }, [
+                h('colgroup', [
+                    h('col'),
+                    h('col', { style: { width: '100%' } }),
+                    h('col'),
+                ]),
                 h('tr', {}, h('th', {}, 'File')),
                 this.meshes.map(mesh =>
-                    h('tr', {}, [
-                        h('td', {}, mesh.filename),
-                        h('td', { style: { float: 'right' } },
+                    h('tr', {
+                        style: { 'background-color': mesh === this.highlightedMesh ? 'cyan' : 'transparent' },
+                        onmousemove: e => { if (mesh.threeMesh.visible) this.highlightMesh(mesh) },
+                    }, [
+                        h('td', h('input', {
+                            type: 'checkbox',
+                            checked: mesh.threeMesh.visible,
+                            onclick: e => { mesh.threeMesh.visible = e.target.checked; this.wakeanimate(); }
+                        })),
+                        h('td', mesh.filename),
+                        h('td',
                             h('button',
                                 { 'onclick': e => { this.removeMesh(mesh) } },
                                 h('span.glyphicon.glyphicon-remove')))]))]);
