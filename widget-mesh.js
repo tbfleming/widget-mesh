@@ -139,7 +139,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
         init: function () {
             this.setupUiFromLocalStorage();
             this.forkSetup();
-            chilipeppr.subscribe("/com-chilipeppr-elem-dragdrop/ondroppedStl", this, this.onDroppedStl);
+            chilipeppr.subscribe("/com-chilipeppr-elem-dragdrop/ondroppedTyped", this, this.onDroppedTyped);
             this.initRenderBody();
             this.request3dObject();
             this.initMouse();
@@ -349,12 +349,30 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             e.stopPropagation();
         },
 
+        onDroppedTyped: function (type, data, info) {
+            if (type === 'stl')
+                this.onDroppedStl(data, info);
+            else if(type.startsWith('image/'))
+                this.onDroppedImage(type, data, info);
+        },
+
         onDroppedStl: function (data, info) {
             let loader = new THREE.STLLoader();
             let geometry = loader.parse(data);
             let material = new THREE.MeshPhongMaterial({ color: 0x007777, specular: 0x111111, shininess: 200 });
             let threeMesh = new THREE.Mesh(geometry, material);
             this.addThreeMesh(threeMesh, { filename: info.name });
+            return false;
+        },
+
+        onDroppedImage: function (type, data, info) {
+            let loader = new THREE.TextureLoader();
+            loader.load(window.URL.createObjectURL(new Blob([data], { type: type })), texture => {
+                let threeMesh = new THREE.Mesh(
+                    new THREE.PlaneBufferGeometry(100, 100, 1, 1),
+                    new THREE.MeshBasicMaterial({ map: texture }));
+                this.addThreeMesh(threeMesh, { filename: info.name });
+            });
             return false;
         },
 
