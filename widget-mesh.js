@@ -274,7 +274,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             if (this.renderArea) {
                 this.renderArea.addEventListener('mousedown', (e) => this.mousedown(e), true);
                 this.renderArea.addEventListener('mousemove', (e) => this.mousemove(e), true);
-                this.renderArea.addEventListener('mouseup', (e) => this.mouseup(e), true);
+                window.addEventListener('mousemove', (e) => this.mousemoveWindow(e), true);
+                window.addEventListener('mouseup', (e) => this.mouseup(e), true);
             }
         },
 
@@ -318,27 +319,33 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             this.mouseDownPoint = this.getXYUnderMouse(e);
             if (this.hightlightMeshUnderMouse(e) && this.mouseDownPoint) {
                 this.mouseIsDown = true;
+                e.preventDefault();
                 e.stopPropagation();
             }
         },
 
         mousemove: function (e) {
-            if (this.mouseIsDown) {
-                let p = this.getXYUnderMouse(e);
-                if (p) {
-                    this.highlightedMesh.threeMesh.position.add(p).sub(this.mouseDownPoint);
-                    this.mouseDownPoint = p;
-                    chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
-                }
-                e.stopPropagation();
-            } else
-                this.hightlightMeshUnderMouse(e);
+            this.hightlightMeshUnderMouse(e);
+        },
+
+        mousemoveWindow: function (e) {
+            if (!this.mouseIsDown)
+                return;
+            let p = this.getXYUnderMouse(e);
+            if (p) {
+                this.highlightedMesh.threeMesh.position.add(p).sub(this.mouseDownPoint);
+                this.mouseDownPoint = p;
+                chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
+            }
+            e.preventDefault();
+            e.stopPropagation();
         },
 
         mouseup: function (e) {
             if (!this.mouseIsDown)
                 return;
             this.mouseIsDown = false;
+            e.preventDefault();
             e.stopPropagation();
         },
 
