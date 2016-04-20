@@ -139,17 +139,20 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
         init: function () {
             this.setupUiFromLocalStorage();
             this.forkSetup();
-            chilipeppr.subscribe("/com-chilipeppr-elem-dragdrop/ondroppedTyped", this, this.onDroppedTyped);
             this.initRenderBody();
             this.request3dObject();
             this.initMouse();
+            chilipeppr.subscribe("/com-chilipeppr-elem-dragdrop/ondroppedTyped", this, this.onDroppedTyped);
+            chilipeppr.subscribe("/org-jscut-widget-mesh/addThreeMesh", this, this.addThreeMesh);
+            chilipeppr.subscribe("/org-jscut-widget-mesh/removeMesh", this, this.removeMesh);
         },
 
         // Mesh object definition: {
-        //      filename:                       Mesh filename
+        //      name:                           name
         //      threeMesh:                      THREE.Mesh
-        //      org-domain-widget-name/*:       Data that belongs to widget
-        //      org-domain-workspace-name/*:    Data that belongs to workspace
+        //      types:                          1 or more of: '3d', '2d', 'image'
+        //      /org-domain-widget-name/*:      Data that belongs to widget
+        //      /org-domain-workspace-name/*:   Data that belongs to workspace
         // }
         meshes: [],
 
@@ -163,8 +166,9 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
         // Add a THREE.Mesh. Returns the new Mesh object.
         addThreeMesh: function (threeMesh, attrs) {
             let mesh = {
-                filename: 'unknown',
-                threeMesh: threeMesh,
+                name:       'unknown',
+                threeMesh:  threeMesh,
+                types:      ['3d'],
             };
             for (let key in attrs)
                 mesh[key] = attrs[key];
@@ -220,7 +224,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
                     h('col', { style: { width: '100%' } }),
                     h('col'),
                 ]),
-                h('tr', {}, h('th', {}, 'File')),
+                h('tr', h('th'), h('th', 'File')),
                 this.meshes.map(mesh =>
                     h('tr', {
                         style: { 'background-color': mesh === this.highlightedMesh ? 'cyan' : 'transparent' },
@@ -231,7 +235,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
                             checked: mesh.threeMesh.visible,
                             onclick: e => { mesh.threeMesh.visible = e.target.checked; this.wakeanimate(); }
                         })),
-                        h('td', mesh.filename),
+                        h('td', mesh.name),
                         h('td',
                             h('button',
                                 { 'onclick': e => { this.removeMesh(mesh) } },
@@ -379,7 +383,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             let geometry = loader.parse(data);
             let material = new THREE.MeshPhongMaterial({ color: 0x007777, specular: 0x111111, shininess: 200 });
             let threeMesh = new THREE.Mesh(geometry, material);
-            this.addThreeMesh(threeMesh, { filename: info.name });
+            this.addThreeMesh(threeMesh, { name: info.name });
             return false;
         },
 
@@ -389,7 +393,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
                 let threeMesh = new THREE.Mesh(
                     new THREE.PlaneBufferGeometry(100, 100, 1, 1),
                     new THREE.MeshBasicMaterial({ map: texture }));
-                this.addThreeMesh(threeMesh, { filename: info.name });
+                this.addThreeMesh(threeMesh, { name: info.name, types: ['2d', 'image'] });
             });
             return false;
         },
