@@ -291,40 +291,62 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             return planeMesh;
         },
 
-        wakeanimate: function() {
+        wakeanimate: function () {
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
         },
 
+        // Render an icon button which floats right
+        renderIconRightButton: function (className, onclick) {
+            let h = WrapVirtualDom.h;
+            return h('button', {
+                style: { 'float': 'right' }, onclick: onclick
+            }, h('span.glyphicon.' + className));
+        },
+
         // Render mesh selection. Other widgets call this to help fill in their UI.
-        renderMeshSelection: function (mesh, callback) {
+        renderMeshSelection: function (state, mesh, changedUI, callback) {
             let h = WrapVirtualDom.h;
             if (mesh) {
                 return h('div', [
                     mesh.name,
-                    h('button',
-                        {
-                            style: { 'float': 'right' },
-                            onclick: () => callback(null),
-                        },
-                        h('span.glyphicon.glyphicon-remove')),
+                    this.renderIconRightButton('glyphicon-remove', () => {
+                        if (this.selectCallback)
+                            this.selectCallback(null);
+                        this.selectCallback = null;
+                        callback(null);
+                    }),
+                ]);
+            } else if (state.selecting) {
+                return h('div', {
+                    style: { 'background-color': 'cyan' },
+                    onclick: () => {
+                        if (this.selectCallback)
+                            this.selectCallback(null);
+                        this.selectCallback = null;
+                        state.selecting = false;
+                        changedUI();
+                    },
+                }, [
+                    'Click a mesh',
+                    this.renderIconRightButton('glyphicon-stop'),
                 ]);
             } else {
                 return h('div', {
                     onclick: e => {
-                        e.target.style.backgroundColor = 'green';
-                        e.target.childNodes[1].style.backgroundColor = 'green';
                         chilipeppr.publish("/com-chilipeppr-elem-flashmsg/flashmsg", "Prismatic", "Click on a Mesh");
                         if (this.selectCallback)
                             this.selectCallback(null);
+                        state.selecting = true;
+                        changedUI();
                         this.selectCallback = mesh => {
-                            e.target.style.backgroundColor = 'transparent';
-                            e.target.childNodes[1].style.backgroundColor = 'transparent';
+                            state.selecting = false;
+                            changedUI();
                             callback(mesh);
                         };
                     }
                 }, [
-                    h('a', { href: '#', style: { 'pointer-events': 'none' } }, '<select>'),
-                    h('button', { style: { 'pointer-events': 'none', 'float': 'right' } }, h('span.glyphicon.glyphicon-edit'))
+                    h('a', { href: '#' }, '<select>'),
+                    this.renderIconRightButton('glyphicon-edit'),
                 ]);
             }
         },
@@ -362,10 +384,10 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                                 }
                             },
                             mesh.name),
-                        h('td',
-                            h('button',
-                                { 'onclick': e => { this.removeMesh(mesh) } },
-                                h('span.glyphicon.glyphicon-remove')))]))]);
+                        h('td', this.renderIconRightButton('glyphicon-remove', e => this.removeMesh(mesh))),
+                    ])
+                ),
+            ]);
         },
 
         // Set this to true to eventually trigger a rerender
