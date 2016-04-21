@@ -210,7 +210,58 @@ cpdefine("inline:org-jscut-widget-mesh", ["chilipeppr_ready", "Three", "ThreeSTL
             this.changed = true;
         },
 
-        wakeanimate:function() {
+        pathsToPolyTree: function (paths) {
+            let c = new ClipperLib.Clipper();
+            c.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
+            let polyTree = new ClipperLib.PolyTree();
+            c.Execute(ClipperLib.ClipType.ctUnion, polyTree, ClipperLib.PolyFillType.pftPositive, ClipperLib.PolyFillType.pftPositive);
+            return polyTree;
+        },
+
+        // Don't use yet; bugs remain
+        polyTreeToTriangles: function (polyNode, z, scale, result) {
+            let pointToVertex = point => new THREE.Vector3(point.X / scale, point.Y / scale, z);
+            let contourToVertexes = path => path.map(pointToVertex);
+            let nodesToVertexes = nodes => nodes.map(node => contourToVertexes(node.Contour()));
+            let processNode = node => {
+                let vertexes = contourToVertexes(node.Contour());
+                let holes = nodesToVertexes(node.Childs());
+                let triangles = THREE.ShapeUtils.triangulateShape(vertexes, holes);
+                for(let h of holes) {
+                    vertexes = vertexes.concat(h);
+                }
+                for(let triangle of triangles) {
+                    result.push(vertexes[triangle[0]], vertexes[triangle[1]], vertexes[triangle[2]]);
+                }
+                for(let hole of node.Childs()) {
+                    for(let next of hole.Childs()) {
+                        this.polyTreeToTriangles(next, z, scale, result);
+                    }
+                }
+            };
+            for(let node of polyNode.Childs()) {
+                processNode(node);
+            }
+        },
+
+        // Don't use yet; bugs remain
+        pathsToThreeMesh: function (paths, z, scale, materialParameters) {
+            let polyTree = this.pathsToPolyTree(paths);
+            let vertexes = [];
+            this.polyTreeToTriangles(polyTree, z, scale, vertexes);
+
+            let planeGeometry = new THREE.Geometry();
+            planeGeometry.vertices = vertexes;
+            for (let i = 0; i < vertexes.length; i += 3)
+                planeGeometry.faces.push(new THREE.Face3(i, i + 1, i + 2));
+            planeGeometry.computeBoundingSphere();
+
+            let planeMaterial = new THREE.MeshBasicMaterial(materialParameters);
+            let planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
+            return planeMesh;
+        },
+
+        wakeanimate: function() {
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
         },
 
