@@ -337,6 +337,15 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         },
 
         // public: other widgets may call this directly
+        offsetPaths: function (paths, delta) {
+            let co = new ClipperLib.ClipperOffset();
+            co.AddPaths(paths, ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
+            let result = [];
+            co.Execute(result, delta);
+            return result;
+        },
+
+        // public: other widgets may call this directly
         removeHolesFromPaths: function (paths) {
             return this.pathsToPolyTree(paths).Childs().map(node => node.Contour());
         },
