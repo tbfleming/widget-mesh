@@ -254,7 +254,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         },
 
         // public: other widgets may call this directly
-        polyTreeToTriangles: function (polyNode, z, scale, result) {
+        polyTreeToTriangles: function (polyTree, z, scale, result) {
             let pointToVertex = point => new THREE.Vector3(point.X / scale, point.Y / scale, z);
             let contourToVertexes = path => path.map(pointToVertex);
             let nodesToVertexes = nodes => nodes.map(node => contourToVertexes(node.Contour()));
@@ -271,11 +271,11 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                 }
                 for(let hole of node.Childs()) {
                     for(let next of hole.Childs()) {
-                        this.polyTreeToTriangles(next, z, scale, result);
+                        processNode(next);
                     }
                 }
             };
-            for(let node of polyNode.Childs()) {
+            for(let node of polyTree.Childs()) {
                 processNode(node);
             }
         },
@@ -545,7 +545,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         },
 
         hightlightMeshUnderMouse: function (e) {
-            if (this.widget3d && (this.widget3d.isInspectSelect || this.widget3d.isJogSelect))
+            if (!this.selectCallback && this.widget3d && (this.widget3d.isInspectSelect || this.widget3d.isJogSelect))
                 return false;
             let index = this.getMeshIndexUnderMouse(e);
             if (index < 0) {
