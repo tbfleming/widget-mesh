@@ -159,6 +159,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         meshes: [],
 
         // Find a Mesh object or a THREE.Mesh. Returns index into meshes[], or undefined
+        // public: other widgets may call this directly
         getMeshIndex: function (mesh) {
             for (let i = 0; i < this.meshes.length; ++i)
                 if (this.meshes[i] === mesh || this.meshes[i].threeMesh === mesh)
@@ -166,11 +167,12 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         },
 
         // Add a THREE.Mesh. Returns the new Mesh object.
+        // public: other widgets may call this directly
         addThreeMesh: function (threeMesh, attrs) {
             let mesh = {
-                name:       'unknown',
-                threeMesh:  threeMesh,
-                types:      ['3d'],
+                name: 'unknown',
+                threeMesh: threeMesh,
+                types: ['3d'],
             };
             for (let key in attrs)
                 mesh[key] = attrs[key];
@@ -184,6 +186,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         },
 
         // Remove a mesh. You may pass in either a Mesh object or a THREE.Mesh.
+        // public: other widgets may call this directly
         removeMesh: function (mesh) {
             let i = this.getMeshIndex(mesh);
             if (i === undefined)
@@ -211,6 +214,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             this.changed = true;
         },
 
+        // public: other widgets may call this directly
         pathsToPolyTree: function (paths) {
             let c = new ClipperLib.Clipper();
             c.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
@@ -219,6 +223,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             return polyTree;
         },
 
+        // public: other widgets may call this directly
         polyTreeToTriangles: function (polyNode, z, scale, result) {
             let pointToVertex = point => new THREE.Vector3(point.X / scale, point.Y / scale, z);
             let contourToVertexes = path => path.map(pointToVertex);
@@ -245,6 +250,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             }
         },
 
+        // public: other widgets may call this directly
         pathsToThreeMesh: function (paths, z, scale, materialParameters) {
             let polyTree = this.pathsToPolyTree(paths);
             let vertexes = [];
@@ -261,6 +267,71 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             return planeMesh;
         },
 
+        // public: other widgets may call this directly
+        addMeshFromPaths: function (paths, z, scale, materialParameters, attrs) {
+            let mesh = this.pathsToThreeMesh(paths, z, scale, materialParameters);
+            let q = { types: ['3d'], };
+            for (let key in attrs)
+                q[key] = attrs[key];
+            this.addThreeMesh(mesh, q);
+        },
+
+        // public: other widgets may call this directly
+        combinePaths: function (a, b, clipType) {
+            let c = new ClipperLib.Clipper();
+            c.AddPaths(a, ClipperLib.PolyType.ptSubject, true);
+            c.AddPaths(b, ClipperLib.PolyType.ptClip, true);
+            let result = [];
+            c.Execute(clipType, result, ClipperLib.PolyFillType.pftPositive, ClipperLib.PolyFillType.pftPositive);
+            return result;
+        },
+
+        // public: other widgets may call this directly
+        intersectPaths: function (a, b) {
+            return this.combinePaths(a, b, ClipperLib.ClipType.ctIntersection);
+        },
+
+        // public: other widgets may call this directly
+        unionPaths: function (a, b) {
+            return this.combinePaths(a, b, ClipperLib.ClipType.ctUnion);
+        },
+
+        // public: other widgets may call this directly
+        diffPaths: function (a, b) {
+            return this.combinePaths(a, b, ClipperLib.ClipType.ctDifference);
+        },
+
+        // public: other widgets may call this directly
+        xorPaths: function (a, b) {
+            return this.combinePaths(a, b, ClipperLib.ClipType.ctXor);
+        },
+
+        // public: other widgets may call this directly
+        removeHolesFromPaths: function (paths) {
+            return this.pathsToPolyTree(paths).Childs().map(node => node.Contour());
+        },
+
+        // Strip away the outer boundaries and invert inner path directions
+        // public: other widgets may call this directly
+        invertPaths: function (paths) {
+            let result = [];
+            let f = node => {
+                let p = node.Contour();
+                p.reverse();
+                result.push(p);
+                for(let child of node.Childs()) {
+                    f(child);
+                }
+            };
+            let tree = this.pathsToPolyTree(paths);
+            for(let top of tree.Childs()) {
+                for(let child of top.Childs()) {
+                    f(child);
+                }
+            }
+            return result;
+        },
+
         wakeanimate: function () {
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
         },
@@ -273,7 +344,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             }, h('span.glyphicon.' + className));
         },
 
-        // Render mesh selection. Other widgets call this to help fill in their UI.
+        // Render a mesh selection control.
+        // public: other widgets may call this directly
         renderMeshSelection: function (state, mesh, changedUI, callback) {
             let h = WrapVirtualDom.h;
             if (mesh) {
@@ -303,7 +375,6 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             } else {
                 return h('div', {
                     onclick: e => {
-                        chilipeppr.publish("/com-chilipeppr-elem-flashmsg/flashmsg", "Prismatic", "Click on a Mesh");
                         if (this.selectCallback)
                             this.selectCallback(null);
                         state.selecting = true;
@@ -332,7 +403,6 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                     h('col', { style: { width: '100%' } }),
                     h('col'),
                 ]),
-                h('tr', h('th'), h('th', 'File')),
                 this.meshes.map(mesh =>
                     h('tr', {
                         style: { 'background-color': mesh === this.highlightedMesh ? 'cyan' : 'transparent' },
@@ -497,7 +567,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         onDroppedTyped: function (type, data, info) {
             if (type === 'stl')
                 this.onDroppedStl(data, info);
-            else if(type.startsWith('image/'))
+            else if (type.startsWith('image/'))
                 this.onDroppedImage(type, data, info);
         },
 
