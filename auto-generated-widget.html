@@ -378,7 +378,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         // Render an icon button which floats right
         renderIconRightButton: function (className, onclick) {
             let h = WrapVirtualDom.h;
-            return h('button', {
+            return h('button.btn.btn-xs.btn-default', {
                 style: { 'float': 'right' }, onclick: onclick
             }, h('span.glyphicon.' + className));
         },
