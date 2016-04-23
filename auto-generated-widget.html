@@ -247,6 +247,25 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             this.changed = true;
         },
 
+        // Get a new typed array with transformed vertexes
+        // public: other widgets may call this directly
+        getTransformedVertexes: function (threeMesh) {
+            let geometry = threeMesh.geometry;
+            if (!(geometry instanceof THREE.BufferGeometry))
+                geometry = new THREE.BufferGeometry().fromGeometry(geometry);
+            let v = geometry.getAttribute('position').array.slice();
+            let m = threeMesh.matrix.elements;
+            for (let i = 0; i < v.length; i += 3) {
+                let x = v[i + 0];
+                let y = v[i + 1];
+                let z = v[i + 2];
+                v[i + 0] = m[0] * x + m[4] * y + m[8] * z + m[12];
+                v[i + 1] = m[1] * x + m[5] * y + m[9] * z + m[13];
+                v[i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+            }
+            return v;
+        },
+
         // public: other widgets may call this directly
         pathsToPolyTree: function (paths) {
             let c = new ClipperLib.Clipper();
