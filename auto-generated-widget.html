@@ -203,6 +203,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                 name: 'unknown',
                 threeMesh: threeMesh,
                 types: ['3d'],
+                edges: new THREE.EdgesHelper(threeMesh, 0x000000),
             };
             for (let key in attrs)
                 mesh[key] = attrs[key];
@@ -210,6 +211,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             threeMesh.material.opacity = .5;
             threeMesh.material.transparent = true;
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneadd', threeMesh);
+            chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneadd', mesh.edges);
             chilipeppr.publish('/org-jscut-widget-mesh/added', mesh, this.meshes);
             this.changed = true;
             return mesh;
@@ -226,6 +228,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                 this.highlightedMesh = null;
             this.meshes.splice(i, 1);
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneremove', mesh.threeMesh);
+            chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneremove', mesh.edges);
             chilipeppr.publish('/org-jscut-widget-mesh/removed', mesh, this.meshes);
             this.changed = true;
         },
@@ -455,7 +458,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                         h('td', h('input', {
                             type: 'checkbox',
                             checked: mesh.threeMesh.visible,
-                            onclick: e => { mesh.threeMesh.visible = e.target.checked; this.wakeanimate(); }
+                            onclick: e => { mesh.threeMesh.visible = mesh.edges.visible = e.target.checked; this.wakeanimate(); }
                         })),
                         h('td',
                             {
