@@ -273,7 +273,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             let q = { types: ['3d'], };
             for (let key in attrs)
                 q[key] = attrs[key];
-            this.addThreeMesh(mesh, q);
+            return this.addThreeMesh(mesh, q);
         },
 
         // public: other widgets may call this directly
