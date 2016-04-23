@@ -358,7 +358,10 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         renderMeshSelection: function (state, mesh, changedUI, callback) {
             let h = WrapVirtualDom.h;
             if (mesh) {
-                return h('div', [
+                return h('div', {
+                    onmouseenter: e => this.highlightMesh(mesh),
+                    onmouseleave: e => this.highlightMesh(null),
+                }, [
                     mesh.name,
                     this.renderIconRightButton('glyphicon-remove', () => {
                         if (this.selectCallback)
@@ -388,6 +391,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                             this.selectCallback(null);
                         state.selecting = true;
                         changedUI();
+                        this.highlightMesh(null);
                         this.selectCallback = mesh => {
                             state.selecting = false;
                             changedUI();
@@ -415,7 +419,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                 this.meshes.map(mesh =>
                     h('tr', {
                         style: { 'background-color': mesh === this.highlightedMesh ? 'cyan' : 'transparent' },
-                        onmousemove: e => { if (mesh.threeMesh.visible) this.highlightMesh(mesh) },
+                        onmouseenter: e => this.highlightMesh(mesh),
+                        onmouseleave: e => this.highlightMesh(null),
                     }, [
                         h('td', h('input', {
                             type: 'checkbox',
