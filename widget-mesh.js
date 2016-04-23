@@ -40,7 +40,7 @@ requirejs.config({
     }
 });
 
-cprequire_test(["inline:org-jscut-widget-mesh"], function(myWidget) {
+cprequire_test(["inline:org-jscut-widget-mesh"], function (myWidget) {
 
     // Test this element. This code is auto-removed by the chilipeppr.load()
     // when using this widget in production. So use the cpquire_test to do things
@@ -63,9 +63,9 @@ cprequire_test(["inline:org-jscut-widget-mesh"], function(myWidget) {
     chilipeppr.load(
         "#testDivForFlashMessageWidget",
         "http://fiddle.jshell.net/chilipeppr/90698kax/show/light/",
-        function() {
+        function () {
             console.log("mycallback got called after loading flash msg module");
-            cprequire(["inline:com-chilipeppr-elem-flashmsg"], function(fm) {
+            cprequire(["inline:com-chilipeppr-elem-flashmsg"], function (fm) {
                 //console.log("inside require of " + fm.id);
                 fm.init();
             });
@@ -77,7 +77,7 @@ cprequire_test(["inline:org-jscut-widget-mesh"], function(myWidget) {
     $('#' + myWidget.id).css('margin', '20px');
     $('title').html(myWidget.name);
 
-} /*end_test*/ );
+} /*end_test*/);
 
 // This is the main definition of your widget. Give it a unique name.
 cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three", "ThreeSTLLoader", "Clipper", "WrapVirtualDom"], function (poly2tri) {
@@ -362,6 +362,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             let h = WrapVirtualDom.h;
             if (mesh) {
                 return h('div', {
+                    style: { display: 'inline' },
                     onmouseenter: e => this.highlightMesh(mesh),
                     onmouseleave: e => this.highlightMesh(null),
                 }, [
@@ -375,7 +376,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                 ]);
             } else if (state.selecting) {
                 return h('div', {
-                    style: { 'background-color': 'cyan' },
+                    style: { display: 'inline', 'background-color': 'cyan' },
                     onclick: () => {
                         if (this.selectCallback)
                             this.selectCallback(null);
@@ -389,6 +390,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                 ]);
             } else {
                 return h('div', {
+                    style: { display: 'inline' },
                     onclick: e => {
                         if (this.selectCallback)
                             this.selectCallback(null);
@@ -619,7 +621,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
          * stored settings from localStorage and then adjust the UI to reflect
          * what the user wants.
          */
-        setupUiFromLocalStorage: function() {
+        setupUiFromLocalStorage: function () {
 
             // Read vals from localStorage. Make sure to use a unique
             // key specific to this widget so as not to overwrite other
@@ -661,7 +663,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
          * should call this method immediately so that on next load the value
          * is correctly set.
          */
-        saveOptionsLocalStorage: function() {
+        saveOptionsLocalStorage: function () {
             // You can add your own values to this.options to store them
             // along with some of the normal stuff like showBody
             var options = this.options;
@@ -679,7 +681,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
          * value in we don't store the preference because it was likely code 
          * that sent in the param.
          */
-        showBody: function(evt) {
+        showBody: function (evt) {
             $('#' + this.id + ' .panel-body').removeClass('hidden');
             $('#' + this.id + ' .panel-footer').removeClass('hidden');
             $('#' + this.id + ' .hidebody span').addClass('glyphicon-chevron-up');
@@ -700,7 +702,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
          * value in we don't store the preference because it was likely code 
          * that sent in the param.
          */
-        hideBody: function(evt) {
+        hideBody: function (evt) {
             $('#' + this.id + ' .panel-body').addClass('hidden');
             $('#' + this.id + ' .panel-footer').addClass('hidden');
             $('#' + this.id + ' .hidebody span').removeClass('glyphicon-chevron-up');
@@ -726,7 +728,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
          * which creates the full pulldown menu for us and attaches the click
          * events.
          */
-        forkSetup: function() {
+        forkSetup: function () {
             var topCssSelector = '#' + this.id;
 
             $(topCssSelector + ' .panel-title').popover({
@@ -740,8 +742,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             });
 
             var that = this;
-            chilipeppr.load("http://fiddle.jshell.net/chilipeppr/zMbL9/show/light/", function() {
-                require(['inline:com-chilipeppr-elem-pubsubviewer'], function(pubsubviewer) {
+            chilipeppr.load("http://fiddle.jshell.net/chilipeppr/zMbL9/show/light/", function () {
+                require(['inline:com-chilipeppr-elem-pubsubviewer'], function (pubsubviewer) {
                     pubsubviewer.attachTo($(topCssSelector + ' .panel-heading .dropdown-menu'), that);
                 });
             });
