@@ -251,9 +251,9 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             // We have to do that part for it.
 
             // Sort vertex indexes by (x, y)
-            let sorted = new Int32Array(vertexes.length / 3);
-            for (let i = 0; i < sorted.length; ++i)
-                sorted[i] = i * 3;
+            let sorted = [];
+            for (let i = 0; i < vertexes.length / 3; ++i)
+                sorted.push(i * 3);
 
             sorted.sort((a, b) => {
                 if (vertexes[a + 0] === vertexes[b + 0])
@@ -277,7 +277,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             // All edges, linked into loops
             let edges = [];
             for (let i = 0; i < vertexes.length; i += 9) {
-                function addEdge(v1, v2) {
+                let addEdge = function (v1, v2) {
                     v1 = vertexToUnique[v1 / 3];
                     v2 = vertexToUnique[v2 / 3];
                     let edge = {
