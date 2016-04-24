@@ -266,6 +266,129 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             return v;
         },
 
+        // Get paths from vertexes. vertexes must be a typed array. Returns [] if the mesh isn't flat.
+        // public: other widgets may call this directly
+        getPathsFromVertexes: function (vertexes, scale) {
+            if (vertexes.length < 9)
+                return [];
+
+            let z = vertexes[2];
+            for (let i = 0; i < vertexes.length; i += 9)
+                if (vertexes[i + 2] !== z || vertexes[i + 5] !== z || vertexes[i + 8] !== z)
+                    return [];
+
+            // Clipper slows to a crawl in JoinCommonEdges() when processing some meshes.
+            // We have to do that part for it.
+
+            // Sort vertex indexes by (x, y)
+            let sorted = new Int32Array(vertexes.length / 3);
+            for (let i = 0; i < sorted.length; ++i)
+                sorted[i] = i * 3;
+
+            sorted.sort((a, b) => {
+                if (vertexes[a + 0] === vertexes[b + 0])
+                    return vertexes[a + 1] - vertexes[b + 1];
+                else
+                    return vertexes[a + 0] - vertexes[b + 0];
+            });
+
+            // Map each vertex to a unique vertex
+            let vertexToUnique = new Int32Array(sorted.length);
+            let unique = 0;
+            for (let i = 0; i < sorted.length; ++i) {
+                if (!i ||
+                    vertexes[sorted[i] + 0] !== vertexes[unique + 0] ||
+                    vertexes[sorted[i] + 1] !== vertexes[unique + 1]) {
+                    unique = sorted[i];
+                }
+                vertexToUnique[sorted[i] / 3] = unique;
+            }
+
+            // All edges, linked into loops
+            let edges = [];
+            for (let i = 0; i < vertexes.length; i += 9) {
+                function addEdge(v1, v2) {
+                    v1 = vertexToUnique[v1 / 3];
+                    v2 = vertexToUnique[v2 / 3];
+                    let edge = {
+                        v1: Math.min(v1, v2),
+                        v2: Math.max(v1, v2),
+                        reversed: v1 > v2,
+                        prev: null,
+                        firstDuplicateIndex: 0,
+                        used: false,
+                    };
+                    edges.push(edge);
+                    return edge;
+                }
+                let e1 = addEdge(i + 0, i + 3);
+                let e2 = addEdge(i + 3, i + 6);
+                let e3 = addEdge(i + 6, i + 0);
+                e1.prev = e3;
+                e2.prev = e1;
+                e3.prev = e2;
+            }
+
+            // sort edges by (v1, v2)
+            edges.sort((a, b) => {
+                if (a.v1 === b.v1)
+                    return a.v2 - b.v2;
+                else
+                    return a.v1 - b.v1;
+            });
+
+            // set firstDuplicateIndex
+            unique = 0;
+            for (let i = 0; i < edges.length; ++i) {
+                let edge = edges[i];
+                if (edge.v1 != edges[unique].v1 || edge.v2 != edges[unique].v2)
+                    unique = i;
+                edge.firstDuplicateIndex = unique;
+            }
+
+            // Create paths
+            let paths = [];
+            for (let i = 0; i < edges.length; ++i) {
+                let edge = edges[i];
+                if (edge.used)
+                    continue;
+                let stack = [];
+                while (!edge.used) {
+                    edge.used = true;
+                    stack.push(edge);
+                    edge = edge.prev;
+                }
+                let path = [];
+                while (stack.length) {
+                    let edge = stack.pop();
+                    let merged = false;
+                    for (let j = edge.firstDuplicateIndex; j < edges.length; ++j) {
+                        if (edges[j].v1 != edge.v1 || edges[j].v2 != edge.v2)
+                            break;
+                        if (!edges[j].used && edges[j].reversed != edge.reversed) {
+                            merged = true;
+                            edge = edges[j];
+                            while (!edge.used) {
+                                edge.used = true;
+                                stack.push(edge);
+                                edge = edge.prev;
+                            }
+                            break;
+                        }
+                    }
+                    if (!merged) {
+                        if (edge.reversed)
+                            path.push({ X: vertexes[edge.v2 + 0] * scale, Y: vertexes[edge.v2 + 1] * scale });
+                        else
+                            path.push({ X: vertexes[edge.v1 + 0] * scale, Y: vertexes[edge.v1 + 1] * scale });
+                    }
+                }
+                paths.push(path);
+            }
+
+            return ClipperLib.Clipper.SimplifyPolygons(paths, ClipperLib.PolyFillType.pftPositive);
+        }, // getPathsFromVertexes
+
         // public: other widgets may call this directly
         pathsToPolyTree: function (paths) {
             let c = new ClipperLib.Clipper();
