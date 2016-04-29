@@ -222,6 +222,22 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             this.changed = true;
         },
 
+        // public: other widgets may call this directly
+        setBoundingBoxSize: function (threeMesh, x, y, z) {
+            let box = this.getBoundingBox(threeMesh);
+            let size = (new THREE.Vector3()).subVectors(box.max, box.min);
+            let center = (new THREE.Vector3()).addVectors(box.max, box.min).divideScalar(2);
+            let m = (new THREE.Matrix4())
+                .makeTranslation(-center.x, -center.y, -center.z)
+                .premultiply((new THREE.Matrix4()).makeScale(
+                    size.x === 0 ? 1 : x / size.x,
+                    size.y === 0 ? 1 : y / size.y,
+                    size.z === 0 ? 1 : z / size.z))
+                .premultiply((new THREE.Matrix4()).makeTranslation(center.x, center.y, center.z));
+            threeMesh.applyMatrix(m);
+            this.changed = true;
+        },
+
         highlightedMesh: null,
 
         highlightMesh: function (mesh) {
@@ -657,6 +673,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             f();
         },
 
+        preserveAspectRatio: true,
         renderPopover: function () {
             let h = WrapVirtualDom.h;
             if (!this.highlightedMesh || !this.selectionRect)
@@ -664,6 +681,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
 
             let threeMesh = this.highlightedMesh.threeMesh;
             let box = this.getBoundingBox(threeMesh);
+            let size = (new THREE.Vector3()).subVectors(box.max, box.min);
 
             let trans = (dx, dy, dz) => {
                 return e => {
@@ -696,6 +714,37 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                 ]);
             };
 
+            let resize = (axis) => {
+                let rounded = Math.round(size[axis] * 1000) / 1000;
+                return h('div', [
+                    '\u0394' + axis.toUpperCase() + ': ',
+                    h('input', {
+                        type: 'number',
+                        step: 'any',
+                        value: rounded,
+                        style: { width: '60px' },
+                        onchange: e => {
+                            let v = Number(e.target.value);
+                            if (isNaN(v))
+                                v = 0;
+                            if (size[axis] > 0 && v > 0) {
+                                if (this.preserveAspectRatio) {
+                                    let scale = v / size[axis];
+                                    size.x *= scale;
+                                    size.y *= scale;
+                                    size.z *= scale;
+                                }
+                                size[axis] = v;
+                                this.setBoundingBoxSize(threeMesh, size.x, size.y, size.z);
+                                this.wakeanimate();
+                                e.target.value = v;
+                            } else
+                                e.target.value = rounded;
+                        },
+                    }),
+                ]);
+            };
+
             return h('div', {
                 style: {
                     position: 'fixed',
@@ -716,6 +765,21 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                         ]),
                         h('td', this.renderSvgButton('Y', 'org-jscut-widget-mesh-y-bottom', trans(0, -box.min.y, 0))),
                         h('td', this.renderSvgButton('Z', 'org-jscut-widget-mesh-y-bottom', trans(0, 0, -box.min.z))),
+                        h('td', {
+                            rowSpan: 4,
+                            colSpan: 3,
+                            style: { 'padding-left': '6px' },
+                        }, [
+                            resize('x'),
+                            resize('y'),
+                            resize('z'),
+                            h('input', {
+                                type: 'checkbox',
+                                checked: this.preserveAspectRatio,
+                                onchange: e => this.preserveAspectRatio = e.target.checked,
+                            }),
+                            'Keep Ratio',
+                        ]),
                     ]),
                     h('tr', [
                         h('td', this.renderSvgButton('Y', 'org-jscut-widget-mesh-y-center', trans(0, -(box.min.y + box.max.y) / 2, 0))),
