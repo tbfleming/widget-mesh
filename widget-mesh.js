@@ -149,6 +149,9 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             chilipeppr.subscribe("/org-jscut-widget-mesh/getWidget", callback => callback(this));
             chilipeppr.subscribe("/org-jscut-widget-mesh/addThreeMesh", this, this.addThreeMesh);
             chilipeppr.subscribe("/org-jscut-widget-mesh/removeMesh", this, this.removeMesh);
+            chilipeppr.subscribe("/org-jscut-widget-mesh/getBoundingBox",
+                (threeMesh, callback) => callback(this.getBoundingBox(threeMesh)));
+            chilipeppr.subscribe("/org-jscut-widget-mesh/setBoundingBoxMin", this, this.setBoundingBoxMin);
         },
 
         // Mesh object definition: {
@@ -202,6 +205,20 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneremove', mesh.threeMesh);
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/sceneremove', mesh.edges);
             chilipeppr.publish('/org-jscut-widget-mesh/removed', mesh, this.meshes);
+            this.changed = true;
+        },
+
+        // public: other widgets may call this directly
+        getBoundingBox: function (threeMesh) {
+            let box = new THREE.Box3();
+            box.setFromObject(threeMesh);
+            return box;
+        },
+
+        // public: other widgets may call this directly
+        setBoundingBoxMin: function (threeMesh, x, y, z) {
+            let min = this.getBoundingBox(threeMesh).min;
+            threeMesh.applyMatrix((new THREE.Matrix4()).makeTranslation(x - min.x, y - min.y, z - min.z));
             this.changed = true;
         },
 
@@ -646,8 +663,7 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                 return '';
 
             let threeMesh = this.highlightedMesh.threeMesh;
-            let box = new THREE.Box3();
-            box.setFromObject(threeMesh);
+            let box = this.getBoundingBox(threeMesh);
 
             let trans = (dx, dy, dz) => {
                 return e => {
@@ -664,20 +680,17 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                     h('input', {
                         type: 'number',
                         step: 'any',
-                        value: box.min[axis],
+                        value: Math.round(box.min[axis] * 1000) / 1000,
                         style: { width: '60px' },
                         onchange: e => {
                             let v = Number(e.target.value);
                             if (isNaN(v))
                                 v = 0;
-                            let d = { x: 0, y: 0, z: 0 };
-                            d[axis] = v - box.min[axis];
-                            let m = (new THREE.Matrix4()).makeTranslation(d.x, d.y, d.z);
-                            threeMesh.applyMatrix(m);
-                            this.changed = true;
+                            let d = { x: box.min.x, y: box.min.y, z: box.min.z };
+                            d[axis] = v;
+                            this.setBoundingBoxMin(threeMesh, d.x, d.y, d.z);
                             this.wakeanimate();
                             e.target.value = v;
-                            this.changed = true;
                         },
                     }),
                 ]);
