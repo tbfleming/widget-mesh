@@ -1,18 +1,13 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <meta http-equiv="content-type" content="text/html; charset=UTF-8">
-
     <title>Widget / Template</title>
-
     <!-- ChiliPeppr is based on bootstrap CSS. -->
     <link rel="stylesheet" type="text/css" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
-
     <!-- Customized version of require.js for ChiliPeppr. Please see require.js docs for how
     ChiliPeppr's dependency system works as it's based on require.js. -->
     <script type='text/javascript' src="//i2dcui.appspot.com/js/require.js"></script>
-
     <style type='text/css'>
 /* CSS for ChiliPeppr Widget */
 
@@ -25,7 +20,6 @@
 }
 
     </style>
-
     <script type='text/javascript'>
     //<![CDATA[
 /* global requirejs cprequire cpdefine chilipeppr THREE */
@@ -170,6 +164,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         init: function () {
             this.setupUiFromLocalStorage();
             this.forkSetup();
+            this.initCloneDomWidget();
+            this.initSelectionRect();
             this.initRenderBody();
             this.request3dObject();
             this.initMouse();
@@ -520,6 +516,28 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
         },
 
+        CloneDomWidget: null,
+        initCloneDomWidget: function () {
+            this.CloneDomWidget = function (id) { this.id = id; };
+            this.CloneDomWidget.prototype.type = "Widget";
+            this.CloneDomWidget.prototype.init = function () {
+                return document.getElementById(this.id).cloneNode(true);
+            };
+            this.CloneDomWidget.prototype.update = function (previous, domNode) { };
+            this.CloneDomWidget.prototype.destroy = function (domNode) { };
+        },
+
+        // Render a button with an SVG copied from id
+        renderSvgButton: function (text, id, onclick) {
+            let h = WrapVirtualDom.h;
+            return h('button.btn.btn-xs.btn-default', {
+                onclick: onclick,
+            }, [
+                text,
+                new this.CloneDomWidget(id),
+            ]);
+        },
+
         // Render an icon button which floats right
         renderIconRightButton: function (className, onclick) {
             let h = WrapVirtualDom.h;
@@ -582,11 +600,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             }
         },
 
-        // Render widget body
-        renderBody: function () {
+        renderMeshTable: function () {
             let h = WrapVirtualDom.h;
-            if (this.meshes.length === 0)
-                return h('div', {}, 'Drag in an STL file to get started.');
             return h('table', { style: { width: '100%' } }, [
                 h('colgroup', [
                     h('col'),
@@ -618,6 +633,126 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                         h('td', this.renderIconRightButton('glyphicon-remove', e => this.removeMesh(mesh))),
                     ])
                 ),
+            ]);
+        },
+
+        selectionRect: null,
+        initSelectionRect: function () {
+            let f = () => {
+                if (!this.highlightedMesh) {
+                    if (this.selectionRect)
+                        this.changed = true;
+                    this.selectionRect = null;
+                } else {
+                    let box = new THREE.Box3();
+                    box.setFromObject(this.highlightedMesh.threeMesh);
+                    var p1 = box.min.project(this.camera);
+                    var p2 = box.max.project(this.camera);
+                    p1.x = (p1.x + 1) / 2 * window.innerWidth;
+                    p1.y = -(p1.y - 1) / 2 * window.innerHeight;
+                    p2.x = (p2.x + 1) / 2 * window.innerWidth;
+                    p2.y = -(p2.y - 1) / 2 * window.innerHeight;
+                    if (!this.selectionRect ||
+                        this.selectionRect.x1 !== p1.x || this.selectionRect.y1 !== p1.y ||
+                        this.selectionRect.x2 !== p2.x || this.selectionRect.y2 !== p2.y) {
+                        this.selectionRect = { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+                        this.changed = true;
+                    };
+                }
+                requestAnimationFrame(f);
+            };
+            f();
+        },
+
+        renderPopover: function () {
+            let h = WrapVirtualDom.h;
+            if (!this.highlightedMesh || !this.selectionRect)
+                return '';
+
+            let threeMesh = this.highlightedMesh.threeMesh;
+            let box = new THREE.Box3();
+            box.setFromObject(threeMesh);
+
+            let trans = (dx, dy, dz) => {
+                return e => {
+                    let m = (new THREE.Matrix4()).makeTranslation(dx, dy, dz);
+                    threeMesh.applyMatrix(m);
+                    this.changed = true;
+                    this.wakeanimate();
+                };
+            };
+
+            let coord = (axis) => {
+                return h('div', [
+                    axis.toUpperCase() + ': ',
+                    h('input', {
+                        type: 'number',
+                        step: 'any',
+                        value: box.min[axis],
+                        style: { width: '60px' },
+                        onchange: e => {
+                            let v = Number(e.target.value);
+                            if (isNaN(v))
+                                v = 0;
+                            let d = { x: 0, y: 0, z: 0 };
+                            d[axis] = v - box.min[axis];
+                            let m = (new THREE.Matrix4()).makeTranslation(d.x, d.y, d.z);
+                            threeMesh.applyMatrix(m);
+                            this.changed = true;
+                            this.wakeanimate();
+                            e.target.value = v;
+                            this.changed = true;
+                        },
+                    }),
+                ]);
+            };
+
+            return h('div', {
+                style: {
+                    position: 'fixed',
+                    zIndex: 1,
+                    left: this.selectionRect.x1 + 'px',
+                    top: this.selectionRect.y1 + 'px',
+                },
+            }, [
+                h('table', [
+                    h('tr', [
+                        h('td', {
+                            rowSpan: 3,
+                            colSpan: 3,
+                        }, [
+                            coord('x'),
+                            coord('y'),
+                            coord('z'),
+                        ]),
+                        h('td', this.renderSvgButton('Y', 'org-jscut-widget-mesh-y-bottom', trans(0, -box.min.y, 0))),
+                        h('td', this.renderSvgButton('Z', 'org-jscut-widget-mesh-y-bottom', trans(0, 0, -box.min.z))),
+                    ]),
+                    h('tr', [
+                        h('td', this.renderSvgButton('Y', 'org-jscut-widget-mesh-y-center', trans(0, -(box.min.y + box.max.y) / 2, 0))),
+                        h('td', this.renderSvgButton('Z', 'org-jscut-widget-mesh-y-center', trans(0, 0, -(box.min.z + box.max.z) / 2))),
+                    ]),
+                    h('tr', [
+                        h('td', this.renderSvgButton('Y', 'org-jscut-widget-mesh-y-top', trans(0, -box.max.y, 0))),
+                        h('td', this.renderSvgButton('Z', 'org-jscut-widget-mesh-y-top', trans(0, 0, -box.max.z))),
+                    ]),
+                    h('tr', [
+                        h('td', this.renderSvgButton('', 'org-jscut-widget-mesh-x-right', trans(-box.max.x, 0, 0))),
+                        h('td', this.renderSvgButton('', 'org-jscut-widget-mesh-x-center', trans(-(box.min.x + box.max.x) / 2, 0, 0))),
+                        h('td', this.renderSvgButton('', 'org-jscut-widget-mesh-x-left', trans(-box.min.x, 0, 0))),
+                    ]),
+                ]),
+            ]);
+        },
+
+        // Render widget body
+        renderBody: function () {
+            let h = WrapVirtualDom.h;
+            if (this.meshes.length === 0)
+                return h('div', {}, 'Drag in an STL file to get started.');
+            return h('div', [
+                this.renderMeshTable(),
+                this.renderPopover(),
             ]);
         },
 
@@ -682,8 +817,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         },
 
         getRaycaster: function (e) {
-            var raycaster = new THREE.Raycaster();
-            var mouse = new THREE.Vector2(
+            let raycaster = new THREE.Raycaster();
+            let mouse = new THREE.Vector2(
                 (e.clientX / window.innerWidth) * 2 - 1,
                 -(e.clientY / window.innerHeight) * 2 + 1);
             raycaster.setFromCamera(mouse, this.camera);
@@ -709,10 +844,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             if (!this.selectCallback && this.widget3d && (this.widget3d.isInspectSelect || this.widget3d.isJogSelect))
                 return false;
             let index = this.getMeshIndexUnderMouse(e);
-            if (index < 0) {
-                this.highlightMesh(null);
+            if (index < 0)
                 return false;
-            }
             this.highlightMesh(this.meshes[index]);
             return true;
         },
@@ -926,32 +1059,283 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
 });
     //]]>
     </script>
-
 </head>
-
 <body>
     <div id="org-jscut-widget-mesh" class="panel panel-default">
         <div class="panel-heading ">
-
             <div class="btn-toolbar pull-right" role="toolbar">
                 <div class="btn-group">
-                    <button type="button" class="btn btn-xs btn-default hidebody"><span class="glyphicon glyphicon-chevron-up"></span>
+                    <button type="button" class="btn btn-xs btn-default hidebody">
+                        <span class="glyphicon glyphicon-chevron-up"></span>
                     </button>
                 </div>
                 <div class="btn-group">
                     <div class="dropdown">
-                        <button type="button" class="btn btn-xs btn-default dropdown-toggle" data-toggle="dropdown"><span class="caret"></span>
+                        <button type="button" class="btn btn-xs btn-default dropdown-toggle" data-toggle="dropdown">
+                            <span class="caret"></span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-right" role="menu"></ul>
                     </div>
                 </div>
             </div> <span class="panel-title" data-toggle="popover">Mesh Widget</span>
-
         </div>
+        <div class="hidden">
+            <svg width="16px"
+                 height="16px"
+                 style="margin:1px 0 -4px 0"
+                 viewBox="0 0 16 16"
+                 id="org-jscut-widget-mesh-x-right">
+                <g inkscape:label="Layer 1"
+                   inkscape:groupmode="layer"
+                   id="layer1"
+                   transform="translate(-84.642857,-157.96934)">
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="159.82771"
+                          y="-98.474617"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="163.26817"
+                          y="-98.474617"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347-0"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="166.70863"
+                          y="-98.474617"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349-7"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="170.14909"
+                          y="-98.474617"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <path style="fill:none;fill-rule:evenodd;stroke:#808080;stroke-width:0.4587279px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          d="m 98.245253,158.35323 0,15.40015"
+                          id="path4205"
+                          inkscape:connector-curvature="0" />
+                </g>
+            </svg>
+            <svg width="16px"
+                 height="16px"
+                 style="margin:1px 0 -4px 0"
+                 viewBox="0 0 16 16"
+                 id="org-jscut-widget-mesh-x-center">
+                <g inkscape:label="Layer 1"
+                   inkscape:groupmode="layer"
+                   id="layer1"
+                   transform="translate(-84.642857,-157.96934)">
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="159.82771"
+                          y="-98.474617"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="163.26817"
+                          y="-96.836304"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347-0"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="166.70863"
+                          y="-98.474617"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349-7"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="170.14909"
+                          y="-96.836304"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <path style="fill:none;fill-rule:evenodd;stroke:#808080;stroke-width:0.4587279px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          d="m 92.658603,158.35323 0,15.40015"
+                          id="path4205"
+                          inkscape:connector-curvature="0" />
+                </g>
+            </svg>
+            <svg width="16px"
+                 height="16px"
+                 style="margin:1px 0 -4px 0"
+                 viewBox="0 0 16 16"
+                 id="org-jscut-widget-mesh-x-left">
+                <g inkscape:label="Layer 1"
+                   inkscape:groupmode="layer"
+                   id="layer1"
+                   transform="translate(-84.642857,-157.96934)">
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="159.82771"
+                          y="-98.474617"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="163.26817"
+                          y="-95.19799"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347-0"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="166.70863"
+                          y="-98.474617"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349-7"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="170.14909"
+                          y="-95.19799"
+                          transform="matrix(0,1,-1,0,0,0)" />
+                    <path style="fill:none;fill-rule:evenodd;stroke:#808080;stroke-width:0.4587279px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          d="m 87.071959,158.35323 0,15.40015"
+                          id="path4205"
+                          inkscape:connector-curvature="0" />
+                </g>
+            </svg>
+            <svg width="16px"
+                 height="16px"
+                 style="margin:1px 0 -4px 0"
+                 viewBox="0 0 16 16"
+                 id="org-jscut-widget-mesh-y-bottom">
+                <g inkscape:label="Layer 1"
+                   inkscape:groupmode="layer"
+                   id="layer1"
+                   transform="translate(-84.642857,-157.96934)">
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="86.433014"
+                          y="160.23729" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="89.873474"
+                          y="163.51392" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347-0"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="93.313934"
+                          y="160.23729" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349-7"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="96.754395"
+                          y="163.51392" />
+                    <path style="fill:none;fill-rule:evenodd;stroke:#808080;stroke-width:0.4587279px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          d="m 84.95853,171.63995 15.40015,0"
+                          id="path4205"
+                          inkscape:connector-curvature="0" />
+                </g>
+            </svg>
+            <svg width="16px"
+                 height="16px"
+                 style="margin:1px 0 -4px 0"
+                 viewBox="0 0 16 16"
+                 id="org-jscut-widget-mesh-y-center">
+                <g inkscape:label="Layer 1"
+                   inkscape:groupmode="layer"
+                   id="layer1"
+                   transform="translate(-84.642857,-157.96934)">
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="86.433014"
+                          y="160.23729" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="89.873474"
+                          y="161.8756" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347-0"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="93.313934"
+                          y="160.23729" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349-7"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="96.754395"
+                          y="161.8756" />
+                    <path style="fill:none;fill-rule:evenodd;stroke:#808080;stroke-width:0.4587279px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          d="m 84.95853,166.05331 15.40015,0"
+                          id="path4205"
+                          inkscape:connector-curvature="0" />
+                </g>
+            </svg>
+            <svg width="16px"
+                 height="16px"
+                 style="margin:1px 0 -4px 0"
+                 viewBox="0 0 16 16"
+                 id="org-jscut-widget-mesh-y-top">
+                <g inkscape:label="Layer 1"
+                   inkscape:groupmode="layer"
+                   id="layer1"
+                   transform="translate(-84.642857,-157.96934)">
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="86.433014"
+                          y="160.66425" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="89.873474"
+                          y="160.66425" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3347-0"
+                          width="2.2936394"
+                          height="11.632029"
+                          x="93.313934"
+                          y="160.66425" />
+                    <rect style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          id="rect3349-7"
+                          width="2.1298079"
+                          height="8.3554001"
+                          x="96.754395"
+                          y="160.66425" />
+                    <path style="fill:none;fill-rule:evenodd;stroke:#808080;stroke-width:0.4587279px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+                          d="m 84.95853,160.4185 15.40015,0"
+                          id="path4205"
+                          inkscape:connector-curvature="0" />
+                </g>
+            </svg>
+        </div>
+
+
         <div id="org-jscut-widget-mesh-body" class="panel-body">
             Loading...
+
+
+
+
         </div>
     </div>
 </body>
-
 </html>

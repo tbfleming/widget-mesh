@@ -140,6 +140,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         init: function () {
             this.setupUiFromLocalStorage();
             this.forkSetup();
+            this.initCloneDomWidget();
+            this.initSelectionRect();
             this.initRenderBody();
             this.request3dObject();
             this.initMouse();
@@ -490,6 +492,28 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             chilipeppr.publish('/com-chilipeppr-widget-3dviewer/wakeanimate');
         },
 
+        CloneDomWidget: null,
+        initCloneDomWidget: function () {
+            this.CloneDomWidget = function (id) { this.id = id; };
+            this.CloneDomWidget.prototype.type = "Widget";
+            this.CloneDomWidget.prototype.init = function () {
+                return document.getElementById(this.id).cloneNode(true);
+            };
+            this.CloneDomWidget.prototype.update = function (previous, domNode) { };
+            this.CloneDomWidget.prototype.destroy = function (domNode) { };
+        },
+
+        // Render a button with an SVG copied from id
+        renderSvgButton: function (text, id, onclick) {
+            let h = WrapVirtualDom.h;
+            return h('button.btn.btn-xs.btn-default', {
+                onclick: onclick,
+            }, [
+                text,
+                new this.CloneDomWidget(id),
+            ]);
+        },
+
         // Render an icon button which floats right
         renderIconRightButton: function (className, onclick) {
             let h = WrapVirtualDom.h;
@@ -552,11 +576,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             }
         },
 
-        // Render widget body
-        renderBody: function () {
+        renderMeshTable: function () {
             let h = WrapVirtualDom.h;
-            if (this.meshes.length === 0)
-                return h('div', {}, 'Drag in an STL file to get started.');
             return h('table', { style: { width: '100%' } }, [
                 h('colgroup', [
                     h('col'),
@@ -588,6 +609,126 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
                         h('td', this.renderIconRightButton('glyphicon-remove', e => this.removeMesh(mesh))),
                     ])
                 ),
+            ]);
+        },
+
+        selectionRect: null,
+        initSelectionRect: function () {
+            let f = () => {
+                if (!this.highlightedMesh) {
+                    if (this.selectionRect)
+                        this.changed = true;
+                    this.selectionRect = null;
+                } else {
+                    let box = new THREE.Box3();
+                    box.setFromObject(this.highlightedMesh.threeMesh);
+                    var p1 = box.min.project(this.camera);
+                    var p2 = box.max.project(this.camera);
+                    p1.x = (p1.x + 1) / 2 * window.innerWidth;
+                    p1.y = -(p1.y - 1) / 2 * window.innerHeight;
+                    p2.x = (p2.x + 1) / 2 * window.innerWidth;
+                    p2.y = -(p2.y - 1) / 2 * window.innerHeight;
+                    if (!this.selectionRect ||
+                        this.selectionRect.x1 !== p1.x || this.selectionRect.y1 !== p1.y ||
+                        this.selectionRect.x2 !== p2.x || this.selectionRect.y2 !== p2.y) {
+                        this.selectionRect = { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+                        this.changed = true;
+                    };
+                }
+                requestAnimationFrame(f);
+            };
+            f();
+        },
+
+        renderPopover: function () {
+            let h = WrapVirtualDom.h;
+            if (!this.highlightedMesh || !this.selectionRect)
+                return '';
+
+            let threeMesh = this.highlightedMesh.threeMesh;
+            let box = new THREE.Box3();
+            box.setFromObject(threeMesh);
+
+            let trans = (dx, dy, dz) => {
+                return e => {
+                    let m = (new THREE.Matrix4()).makeTranslation(dx, dy, dz);
+                    threeMesh.applyMatrix(m);
+                    this.changed = true;
+                    this.wakeanimate();
+                };
+            };
+
+            let coord = (axis) => {
+                return h('div', [
+                    axis.toUpperCase() + ': ',
+                    h('input', {
+                        type: 'number',
+                        step: 'any',
+                        value: box.min[axis],
+                        style: { width: '60px' },
+                        onchange: e => {
+                            let v = Number(e.target.value);
+                            if (isNaN(v))
+                                v = 0;
+                            let d = { x: 0, y: 0, z: 0 };
+                            d[axis] = v - box.min[axis];
+                            let m = (new THREE.Matrix4()).makeTranslation(d.x, d.y, d.z);
+                            threeMesh.applyMatrix(m);
+                            this.changed = true;
+                            this.wakeanimate();
+                            e.target.value = v;
+                            this.changed = true;
+                        },
+                    }),
+                ]);
+            };
+
+            return h('div', {
+                style: {
+                    position: 'fixed',
+                    zIndex: 1,
+                    left: this.selectionRect.x1 + 'px',
+                    top: this.selectionRect.y1 + 'px',
+                },
+            }, [
+                h('table', [
+                    h('tr', [
+                        h('td', {
+                            rowSpan: 3,
+                            colSpan: 3,
+                        }, [
+                            coord('x'),
+                            coord('y'),
+                            coord('z'),
+                        ]),
+                        h('td', this.renderSvgButton('Y', 'org-jscut-widget-mesh-y-bottom', trans(0, -box.min.y, 0))),
+                        h('td', this.renderSvgButton('Z', 'org-jscut-widget-mesh-y-bottom', trans(0, 0, -box.min.z))),
+                    ]),
+                    h('tr', [
+                        h('td', this.renderSvgButton('Y', 'org-jscut-widget-mesh-y-center', trans(0, -(box.min.y + box.max.y) / 2, 0))),
+                        h('td', this.renderSvgButton('Z', 'org-jscut-widget-mesh-y-center', trans(0, 0, -(box.min.z + box.max.z) / 2))),
+                    ]),
+                    h('tr', [
+                        h('td', this.renderSvgButton('Y', 'org-jscut-widget-mesh-y-top', trans(0, -box.max.y, 0))),
+                        h('td', this.renderSvgButton('Z', 'org-jscut-widget-mesh-y-top', trans(0, 0, -box.max.z))),
+                    ]),
+                    h('tr', [
+                        h('td', this.renderSvgButton('', 'org-jscut-widget-mesh-x-right', trans(-box.max.x, 0, 0))),
+                        h('td', this.renderSvgButton('', 'org-jscut-widget-mesh-x-center', trans(-(box.min.x + box.max.x) / 2, 0, 0))),
+                        h('td', this.renderSvgButton('', 'org-jscut-widget-mesh-x-left', trans(-box.min.x, 0, 0))),
+                    ]),
+                ]),
+            ]);
+        },
+
+        // Render widget body
+        renderBody: function () {
+            let h = WrapVirtualDom.h;
+            if (this.meshes.length === 0)
+                return h('div', {}, 'Drag in an STL file to get started.');
+            return h('div', [
+                this.renderMeshTable(),
+                this.renderPopover(),
             ]);
         },
 
@@ -652,8 +793,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
         },
 
         getRaycaster: function (e) {
-            var raycaster = new THREE.Raycaster();
-            var mouse = new THREE.Vector2(
+            let raycaster = new THREE.Raycaster();
+            let mouse = new THREE.Vector2(
                 (e.clientX / window.innerWidth) * 2 - 1,
                 -(e.clientY / window.innerHeight) * 2 + 1);
             raycaster.setFromCamera(mouse, this.camera);
@@ -679,10 +820,8 @@ cpdefine("inline:org-jscut-widget-mesh", ["Poly2tri", "chilipeppr_ready", "Three
             if (!this.selectCallback && this.widget3d && (this.widget3d.isInspectSelect || this.widget3d.isJogSelect))
                 return false;
             let index = this.getMeshIndexUnderMouse(e);
-            if (index < 0) {
-                this.highlightMesh(null);
+            if (index < 0)
                 return false;
-            }
             this.highlightMesh(this.meshes[index]);
             return true;
         },
